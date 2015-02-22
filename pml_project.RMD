@@ -1,0 +1,105 @@
+Practical Machine Learning - Assignment Writeup
+==========================================================
+
+Introduction
+------------
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.
+
+The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases. 
+
+Data loading
+------------
+
+```{r}
+library(caret)
+library(randomForest)
+library(foreach)
+library(doParallel)
+options(warn=-1)
+```
+
+```{r}
+setwd("/Users/afeher/data")
+training_data <- read.csv("pml-training.csv" )
+testing_data <- read.csv("pml-testing.csv" )
+```
+
+Data cleaning/preparation
+-------------------------
+
+```{r}
+for(i in c(8:ncol(training_data)-1)) {training_data[,i] = as.numeric(as.character(training_data[,i]))}
+for(i in c(8:ncol(testing_data)-1)) {testing_data[,i] = as.numeric(as.character(testing_data[,i]))}
+```
+
+Creating the final field list.
+
+```{r}
+used_fields <- colnames(training_data[colSums(is.na(training_data)) == 0])[-(3:7)]
+used_fields <- used_fields[-(1:1)]
+final_training_data <- training_data[used_fields]
+used_fields
+```
+
+This concludes the data preparation steps. The next step is to create the random training and test data sets
+from the final prepared training data set using the typical 60 to 40 ratio. These training and test data sets 
+will be used to train and test the prediction algorithm (random forrest) before it is applied to the main 
+test data set.
+
+```{r}
+idx <- createDataPartition(y=final_training_data$classe, p=0.6, list=FALSE )
+trn <- final_training_data[idx,]
+tst <- final_training_data[-idx,]
+```
+
+Training
+--------
+
+```{r}
+registerDoParallel()
+x <- trn[-ncol(trn)]
+y <- trn$classe
+
+rf_model <- foreach(ntree=rep(50, 4), .combine=randomForest::combine, .packages='randomForest') %dopar% {
+randomForest(x, y, ntree=ntree) 
+}
+```
+
+Training concludes.
+
+Error reports
+-------------
+
+```{r}
+confusionMatrix(predict(rf_model, newdata=trn),trn$classe)
+confusionMatrix(predict(rf_model, newdata=tst),tst$classe)
+```
+
+Display result and create result files using the provided code:
+
+```{r}
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+
+x <- testing_data
+x <- x[used_fields[used_fields!='classe']]
+answers <- predict(rf_model, newdata=x)
+
+answers
+
+pml_write_files(answers)
+```
+
+Conclusion
+----------
+
+The confusion matrices show that the model is very accurate especialy with the name filed included.
+Normally the name field should be removed from the training data set. I guess the exercise was set
+up this way in order to amke it possible to achieve 100% accuracy.
